@@ -4,6 +4,7 @@
  * Converts an Infix expression to Prefix notation 
  */
 var Parser,
+    Printer,
     Stack,
     LEFT = 0,
     RIGHT = 1;
@@ -95,6 +96,46 @@ Parser.prototype = {
     }
 };
 
+Printer = function (expr) {
+    var rpnArray = new Parser(expr);
+
+    this.output = '';
+
+    this.print(rpnArray);
+    console.log(this.output);
+
+    return this.output;
+};
+
+Printer.prototype = {
+    print: function (tokens, prevToken) {
+        var token = tokens.pop(),
+            operator = /[+\-*\/\^]/,
+            numVar = /[a-zA-Z0-9]/;
+
+        if (token.match(operator)) {
+            if (
+                typeof prevToken !== 'undefined' &&
+                !prevToken.match(operator)
+            ) {
+                this.output += ')';
+            }
+
+            this.output += '(' + token;
+        } else if (token.match(numVar)) {
+            this.output += ' ' + token;
+
+            if (prevToken.match(numVar)) {
+                this.output += ')';
+            }
+        }
+        
+        if (tokens.length > 0) {
+            this.print(tokens, token);
+        }
+    }
+};
+
 // Simple stack piggy backing off of Array prototype
 Stack = function () {};
 Stack.prototype = [];
@@ -106,3 +147,4 @@ Stack.prototype.toArray = function () {
 };
 
 exports.Parser = Parser;
+exports.Printer = Printer;
