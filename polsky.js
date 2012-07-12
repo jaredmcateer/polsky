@@ -57,11 +57,15 @@ Parser.prototype = {
         '^': { weight: 4, assoc: RIGHT }
     } ,
 
-    // Parse an expression.
-    // TODO error checking
+    /**
+     * Parses an expression
+     *
+     * @param array tokens the tokens to be parsed in infix notation order
+     * @TODO Error checking
+     */
     parse: function (tokens) {
         while (tokens.length) {
-            this.parseToken(tokens.shift());
+            this.processToken(tokens.shift());
         }
 
         // If there is anything left on the stack pop them into the output.
@@ -70,7 +74,38 @@ Parser.prototype = {
         }
     },
 
-    parseToken: function (token) {
+    /**
+     *  Processes an indvidual token
+     *
+     *  The token is processed using the Shunting Yard Algorithm:
+     *
+     *  If token is a number/variable
+     *    add to output queue
+     *  elIf token is an operator, op1, then
+     *    while there is an operator, op2, at the top of the stack loop
+     *      if op1 is left-associative and its precedence weight is <= that of op2
+     *        OR op1 has precedence weight less than that of op2
+     *          pop o2 off stack and push o2 onto output queue
+     *    end loop
+     *    push o1 onto stack
+     *  elif token is left paren
+     *    push on to stack
+     *  elif token is right paren
+     *    while operator, o1, at top of the stack is not the matching left paren
+     *      pop o1 off stack and push it onto output queue
+     *    endloop
+     *
+     *    if operator at top of stack is not the left paren
+     *       error
+     *    else 
+     *      pop matching paren off stack and discard
+     *  else
+     *    error
+     *  endif
+     *
+     *  @param string token
+     */
+    processToken: function (token) {
         var op1, op2;
 
         //token is a number or variable
@@ -78,7 +113,7 @@ Parser.prototype = {
             this.output.push(token);
 
         } else if (token.match(OPERATOR)) {
-            while (this.stack.length && this.isOperator(this.stack.top())) {
+            while (this.stack.length && this.stack.top().match(OPERATOR)) {
                 op1 = this.operators[token];
                 op2 = this.operators[this.stack.top()];
 
@@ -110,6 +145,11 @@ Parser.prototype = {
         }
     },
 
+    /**
+     * Converts an RPN array into an Abstract Syntax Tree
+     *
+     * @param array tokens the RPN array
+     */
     convertToAst: function (tokens) {
         var token = tokens.pop();
 
@@ -124,16 +164,22 @@ Parser.prototype = {
         }
     },
 
+    /**
+     * Prints the AST in a human readable format
+     *
+     * When encountering a string it will immediately return the value
+     * but if it encounters an object it will walk the object down the
+     * right side first, then left side formatting the string in a readable 
+     * format.
+     *
+     * @param object|string node The node to stringify
+     */
     print: function (node) {
         if (typeof node === 'string') {
             return node;
         } else {
             return '(' + node.operator + ' ' + this.print(node.right) + ' ' + this.print(node.left) + ')'; 
         }
-    },
-
-    isOperator: function (token) {
-        return !!this.operators[token];
     }
 };
 
