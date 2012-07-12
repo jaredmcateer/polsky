@@ -1,6 +1,9 @@
 {
     "name": "polsky",
     "version": "0.0.1",
+    "dependencies": {
+        "cmdopt": "0.2.x"
+    },
     "engines": {
         "node": "0.8.x"
     }

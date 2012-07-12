@@ -50,7 +50,7 @@ Parser = function (expr) {
     var tokens,
         that = this;
 
-    tokens = expr.split(' ');
+    tokens = expr.replace(/\s{2,}/g, ' ').split(' ');
 
     this.stack = new Stack();
     this.output = new Stack();
@@ -179,6 +179,8 @@ Parser.prototype = {
             } else {
                 throw new Error ('Mismatched Parens');
             }
+        } else {
+            throw new Error('Invalid token');
         }
     },
 
