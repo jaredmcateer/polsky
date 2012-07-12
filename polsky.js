@@ -4,7 +4,6 @@
  * Converts an Infix expression to Prefix notation 
  */
 var Parser,
-    Printer,
     Stack,
     LEFT = 0,
     RIGHT = 1;
@@ -16,16 +15,34 @@ var Parser,
  * @return array an array ordered in (reverse) polish notion
  */
 Parser = function (expr) {
-    var tokens;
+    var tokens,
+        that = this;
 
     tokens = expr.split(' ');
 
     this.stack = new Stack();
     this.output = new Stack();
+    this.ast = null;
 
     this.parse(tokens);
+    this.ast = this.convertToAst(that.output.toArray());
 
-    return this.output.toArray();
+    return {
+        // returns an array ordered in reverse polish notation
+        parse: function () {
+            return that.output.toArray();
+        },
+
+        // coverts RPN array to Abstract Syntax Tree
+        convertToAst: function () {
+            return that.ast;
+        },
+
+        // converts array to string with, unnecessary, parenthesis
+        print: function () {
+            return that.print(that.ast);
+        }
+    };
 };
 
 Parser.prototype = {
@@ -91,48 +108,30 @@ Parser.prototype = {
         }
     },
 
+    convertToAst: function (tokens) {
+        var token = tokens.pop();
+
+        if (token.match(/[a-zA-Z0-9]/)) {
+            return token;
+        } else if (token.match(/[+\-*\/\^]/)) {
+            return {
+                operator: token,
+                left: this.convertToAst(tokens),
+                right:  this.convertToAst(tokens)
+            };
+        }
+    },
+
+    print: function (node) {
+        if (typeof node === 'string') {
+            return node;
+        } else {
+            return '(' + node.operator + ' ' + this.print(node.right) + ' ' + this.print(node.left) + ')'; 
+        }
+    },
+
     isOperator: function (token) {
         return !!this.operators[token];
-    }
-};
-
-Printer = function (expr) {
-    var rpnArray = new Parser(expr);
-
-    this.output = '';
-
-    this.print(rpnArray);
-    console.log(this.output);
-
-    return this.output;
-};
-
-Printer.prototype = {
-    print: function (tokens, prevToken) {
-        var token = tokens.pop(),
-            operator = /[+\-*\/\^]/,
-            numVar = /[a-zA-Z0-9]/;
-
-        if (token.match(operator)) {
-            if (
-                typeof prevToken !== 'undefined' &&
-                !prevToken.match(operator)
-            ) {
-                this.output += ')';
-            }
-
-            this.output += '(' + token;
-        } else if (token.match(numVar)) {
-            this.output += ' ' + token;
-
-            if (prevToken.match(numVar)) {
-                this.output += ')';
-            }
-        }
-        
-        if (tokens.length > 0) {
-            this.print(tokens, token);
-        }
     }
 };
 
@@ -147,4 +146,3 @@ Stack.prototype.toArray = function () {
 };
 
 exports.Parser = Parser;
-exports.Printer = Printer;
