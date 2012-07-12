@@ -82,7 +82,7 @@ Parser = function (expr) {
 };
 
 Parser.prototype = {
-    // list of operators and their weights
+    // list of operators and their weights and methods
     operators: {
         '+': { 
             weight: 2, 
@@ -183,7 +183,7 @@ Parser.prototype = {
     },
 
     /**
-     * Converts an RPN array into an Abstract Syntax Tree
+     * Converts an Reverse Polish Notation array into an Abstract Syntax Tree
      *
      * @param array tokens the RPN array
      * @return object Returns an abstract syntax tree object
@@ -195,6 +195,8 @@ Parser.prototype = {
         if (token.match(NUMVAR)) {
             node = token;
         } else if (token.match(OPERATOR)) {
+            // Since the array is in rpn, process the 
+            // right side of the tree first then the left.
             node = {
                 operator: token,
                 right:  this.convertToAst(tokens),
@@ -222,23 +224,19 @@ Parser.prototype = {
             left,
             right;
 
+        if (reduce && typeof node !== 'string') {
+            left = this.print(node.left, reduce);
+            right = this.print(node.right, reduce);
+
+            node.left = left;
+            node.right = right;
+            node = this.reduce(node);
+        }
+
         if (typeof node === 'string') {
             str = node;
         } else {
-            if (reduce) {
-                left = this.print(node.left, reduce);
-                right = this.print(node.right, reduce);
-
-                node.left = left;
-                node.right = right;
-                node = this.reduce(node);
-            }
-
-            if (typeof node === 'string') {
-                str = node;
-            } else {
-                str = '(' + node.operator + ' ' + this.print(node.left) + ' ' + this.print(node.right) + ')'; 
-            }
+            str = '(' + node.operator + ' ' + this.print(node.left) + ' ' + this.print(node.right) + ')'; 
         }
 
         return str;
