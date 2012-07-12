@@ -11,11 +11,12 @@ The exposed api will provides the following methods:
 * `#parse()` method which returns an array in Postfix/Reverse Polish Notation
 * `#convertToAst()` - returns the parsed expression in as an Abstract Syntax Tree object
 * `#print([reduce])` - returns the expression as a string in Polish/Prefix notation.
-** Optionally when reduce is set to true the print formatter will attempt to reduce the function. This is pretty simple and won't reduce division if the return value is not an integer nor will it perform alegbraic reductions
+  * Optionally when reduce is set to true the print formatter will attempt to reduce the function. This is pretty simple and won't reduce division if the return value is not an integer nor will it perform alegbraic reductions
 
 # Installation
 
 `git clone git@bitbucket.org:jaredmcateer/polsky.git`
+
 `npm install`
 
 You can either run through node, your own script or parse a file of expressions using:
