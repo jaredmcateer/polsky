@@ -5,6 +5,8 @@
  */
 var Parser,
     Stack,
+    NUMVAR = /[a-zA-Z0-9]/,
+    OPERATOR = /[+\-*\/\^]/,
     LEFT = 0,
     RIGHT = 1;
 
@@ -25,7 +27,7 @@ Parser = function (expr) {
     this.ast = null;
 
     this.parse(tokens);
-    this.ast = this.convertToAst(that.output.toArray());
+    this.ast = this.convertToAst(that.output);
 
     return {
         // returns an array ordered in reverse polish notation
@@ -72,10 +74,10 @@ Parser.prototype = {
         var op1, op2;
 
         //token is a number or variable
-        if (token.match(/[a-zA-Z0-9]/)) {
+        if (token.match(NUMVAR)) {
             this.output.push(token);
 
-        } else if (this.isOperator(token)) {
+        } else if (token.match(OPERATOR)) {
             while (this.stack.length && this.isOperator(this.stack.top())) {
                 op1 = this.operators[token];
                 op2 = this.operators[this.stack.top()];
@@ -111,9 +113,9 @@ Parser.prototype = {
     convertToAst: function (tokens) {
         var token = tokens.pop();
 
-        if (token.match(/[a-zA-Z0-9]/)) {
+        if (token.match(NUMVAR)) {
             return token;
-        } else if (token.match(/[+\-*\/\^]/)) {
+        } else if (token.match(OPERATOR)) {
             return {
                 operator: token,
                 left: this.convertToAst(tokens),
