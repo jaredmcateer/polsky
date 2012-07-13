@@ -5,15 +5,18 @@ var cmdopt = require('cmdopt'),
     opts,
     polsky = require('./polsky'),
     fs = require('fs'),
-    fileName = process.argv.pop(),
+    fileName,
     reduce = false;
 
-getOpts.option('-r, --reduce', 'will attempt to reduce the equation when integer math is possible.');
+getOpts.option('-h, --help', 'Show this.');
+getOpts.option('-r, --reduce', 'Will attempt to reduce the equation when integer math is possible.');
 
 try {
     opts = getOpts.parse(process.argv.slice(2));
+
     if (opts.help) {
         process.stdout.write(getOpts.help());
+        process.exit();
     } else if (opts.r || opts.reduce) {
         reduce = true;
     }
@@ -26,26 +29,39 @@ try {
     throw optex;
 }
 
-fs.readFile(fileName, 'utf8', function (err, data) {
-    var EOL = data.indexOf("\r\n") >= 0 ? "\r\n" : "\n",
-        lineEnd = new RegExp(EOL, 'g'),
-        parser,
-        lines;
-        
-    lines =data.split(lineEnd);
-    lines.pop(); //drop last EOL
+fileName = process.argv.slice(2).pop();
 
-    lines.forEach(function(expr){
-        var output = '';
+if (!fileName) {
+    process.stdout.write('Please provide a file to process\n');
+    process.exit(1);
+}
 
-        try {
-            parser = new polsky.Parser(expr);
-            output = expr + ' -> ' + parser.print(reduce);
-        } catch (e) {
-            process.stdout.write('Error encountered: ' + e.message + EOL);
-        }
+fs.exists(fileName, function (exists){
+    if (!exists) {
+        process.stdout.write('File not found: ' + fileName + '\n');
+        process.exit(1);
+    } else {
+        fs.readFile(fileName, 'utf8', function (err, data) {
+            var EOL = data.indexOf("\r\n") >= 0 ? "\r\n" : "\n",
+                lineEnd = new RegExp(EOL, 'g'),
+                parser,
+                lines;
 
-        process.stdout.write(output + EOL);
-    });
+            lines =data.split(lineEnd);
+            lines.pop(); //drop last EOL
 
+            lines.forEach(function(expr){
+                var output = '';
+
+                try {
+                    parser = new polsky.Parser(expr);
+                    output = expr + ' -> ' + parser.print(reduce);
+                } catch (e) {
+                    process.stdout.write('Error encountered: ' + e.message + EOL);
+                }
+
+                process.stdout.write(output + EOL);
+            });
+        });
+    }
 });
