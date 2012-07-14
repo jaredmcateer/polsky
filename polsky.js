@@ -57,17 +57,11 @@ Parser = function (expr) {
     this.ast = null;
 
     this.parse(tokens);
-    this.ast = this.convertToAst(that.output);
 
     return {
         // returns an array ordered in reverse polish notation
         parse: function () {
-            return that.output.toArray();
-        },
-
-        // coverts RPN array to Abstract Syntax Tree
-        convertToAst: function () {
-            return that.ast;
+            return that.output[0];
         },
 
         /**
@@ -127,13 +121,15 @@ Parser.prototype = {
      * @param array tokens the tokens to be parsed in infix notation order
      */
     parse: function (tokens) {
+        var node;
         while (tokens.length) {
             this.processToken(tokens.shift());
         }
 
         // If there is anything left on the stack pop them into the output.
         while (this.stack.length) {
-            this.output.push(this.stack.pop());
+            node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+            this.output.push(node);
         }
     },
 
@@ -143,7 +139,7 @@ Parser.prototype = {
      *  @param string token
      */
     processToken: function (token) {
-        var op1, op2;
+        var op1, op2, node;
 
         //token is a number or variable
         if (token.match(NUMVAR)) {
@@ -158,7 +154,8 @@ Parser.prototype = {
                     (op1.assoc === LEFT  && op1.weight <= op2.weight) || 
                     (op1.assoc === RIGHT && op1.weight <  op2.weight)
                 ) {
-                    this.output.push(this.stack.pop());
+                    node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+                    this.output.push(node);
                 } else {
                     break;
                 }
@@ -171,7 +168,8 @@ Parser.prototype = {
 
         } else if (token === ')') {
             while (this.stack.length && this.stack.top() !== '(') {
-                this.output.push(this.stack.pop());
+                node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+                this.output.push(node);
             }
 
             if (this.stack.top() === '(') {
@@ -184,29 +182,12 @@ Parser.prototype = {
         }
     },
 
-    /**
-     * Converts an Reverse Polish Notation array into an Abstract Syntax Tree
-     *
-     * @param array tokens the RPN array
-     * @return object Returns an abstract syntax tree object
-     */
-    convertToAst: function (tokens) {
-        var token = tokens.pop(),
-            node;
-
-        if (token.match(NUMVAR)) {
-            node = token;
-        } else if (token.match(OPERATOR)) {
-            // Since the array is in rpn, process the 
-            // right side of the tree first then the left.
-            node = {
-                operator: token,
-                right:  this.convertToAst(tokens),
-                left: this.convertToAst(tokens)
-            };
-        }
-
-        return node;
+    makeNode: function (op, right, left) {
+        return {
+            operator: op,
+            left: left,
+            right: right
+        };
     },
 
     /**
