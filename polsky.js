@@ -37,14 +37,20 @@ var Parser,
     Stack,
     NUMVAR = /[a-zA-Z0-9]/,
     OPERATOR = /[+\-*\/\^]/,
+    LPAREN = '(',
+    RPAREN = ')',
     LEFT = 0,
     RIGHT = 1;
 
 /**
- * Parser
+ * Infix Parser
  *
- * @param string expr The infix expression to be converted, each operator and number must be separated by a space.
- * @return array an array ordered in (reverse) polish notion
+ * This parser will convert an expression in infix notation to an abstract syntax tree 
+ * and is capable of printing the function in prefix notation
+ *
+ * @param String expression to be parsed. Each token must be separated by a space (e.g., ( 1 + 3 ) * 8 )
+ *
+ * @return Object containing available functions to preform with the expression
  */
 Parser = function (expr) {
     var tokens,
@@ -52,24 +58,32 @@ Parser = function (expr) {
 
     tokens = expr.replace(/\s{2,}/g, ' ').split(' ');
 
-    this.stack = new Stack();
+    this.stack  = new Stack();
     this.output = new Stack();
     this.ast = null;
 
-    this.parse(tokens);
-
     return {
-        // returns an array ordered in reverse polish notation
+        /**
+         * #parse() - Parses the expression into an abstract syntax tree
+         *
+         * @return The Abstract Syntax Tree
+         */
         parse: function () {
-            return that.output[0];
+            that.parse(tokens);
+            return that.ast;
         },
 
         /**
          * Formats the expression into a human readable format
          *
          * @param boolean reduce Optional. If true the equation will attempt simple reduction
+         * @return the string of the formatted expression in prefix notation
          */
         print: function (reduce) {
+            if (that.ast === null) {
+                that.parse(tokens);
+            }
+
             return that.print(that.ast, reduce);
         }
     };
@@ -131,6 +145,8 @@ Parser.prototype = {
             node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
             this.output.push(node);
         }
+
+        this.ast = this.output.pop();
     },
 
     /**
@@ -163,16 +179,16 @@ Parser.prototype = {
 
             this.stack.push(token);
 
-        } else if (token === '(') {
+        } else if (token === LPAREN) {
             this.stack.push(token);
 
-        } else if (token === ')') {
-            while (this.stack.length && this.stack.top() !== '(') {
+        } else if (token === RPAREN) {
+            while (this.stack.length && this.stack.top() !== LPAREN) {
                 node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
                 this.output.push(node);
             }
 
-            if (this.stack.top() === '(') {
+            if (this.stack.top() === LPAREN) {
                 this.stack.pop();
             } else {
                 throw new Error ('Mismatched Parens');
@@ -182,11 +198,19 @@ Parser.prototype = {
         }
     },
 
+    /**
+     * Makes a node for structuring the Abstract Syntax Tree
+     *
+     * @param string The operator in the node
+     * @param string The left protion of the branch
+     * @param string The right portion of the branch
+     * @return The node object
+     */
     makeNode: function (op, right, left) {
         return {
             operator: op,
-            left: left,
-            right: right
+            left:     left,
+            right:    right
         };
     },
 
@@ -208,10 +232,10 @@ Parser.prototype = {
             right;
 
         if (reduce && typeof node !== 'string') {
-            left = this.print(node.left, reduce);
+            left  = this.print(node.left, reduce);
             right = this.print(node.right, reduce);
 
-            node.left = left;
+            node.left  = left;
             node.right = right;
             node = this.reduce(node);
         }
@@ -236,7 +260,8 @@ Parser.prototype = {
      */
     reduce: function (node) {
         if (!node.hasOwnProperty('operator')) { return node; }
-        var left = parseInt(node.left, 10),
+
+        var left  = parseInt(node.left, 10),
             right = parseInt(node.right, 10),
             opMethod = this.operators[node.operator].method,
             tmp,
