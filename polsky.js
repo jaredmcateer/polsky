@@ -61,6 +61,7 @@ Parser = function (expr) {
     this.stack  = new Stack();
     this.output = new Stack();
     this.ast = null;
+    this.reduce = false;
 
     return {
         /**
@@ -68,9 +69,9 @@ Parser = function (expr) {
          *
          * @return The Abstract Syntax Tree
          */
-        parse: function () {
-            that.parse(tokens);
-            return that.ast;
+        parse: function (reduce) {
+            that.reduce = reduce;
+            return that.parse(tokens);
         },
 
         /**
@@ -80,12 +81,15 @@ Parser = function (expr) {
          * @return the string of the formatted expression in prefix notation
          */
         print: function (reduce) {
-            if (that.ast === null) {
-                that.parse(tokens);
-            }
+            that.reduce = reduce;
 
-            return that.print(that.ast, reduce);
-        }
+            return that.print(that.parse(tokens));
+        },
+        
+        levelNode: function(node) {
+            return that.levelNode(node);
+
+        } 
     };
 };
 
@@ -117,7 +121,18 @@ Parser.prototype = {
             weight: 3, 
             assoc: LEFT,
             method: function (a, b) {
-                return a / b;
+                var gcd = (function getGcd(num, dem) {
+                        return dem ? getGcd(dem, num % dem) : num;
+                    }(a, b)),
+                    retVal;
+
+                retVal = a / b;
+
+                if (retVal % 1 !== 0) {
+                    retVal = [a/gcd, b/gcd];
+                }
+
+                return retVal;
             }
         },
         '^': { 
@@ -135,18 +150,22 @@ Parser.prototype = {
      * @param array tokens the tokens to be parsed in infix notation order
      */
     parse: function (tokens) {
-        var node;
+        var node, left, right;
         while (tokens.length) {
             this.processToken(tokens.shift());
         }
 
         // If there is anything left on the stack pop them into the output.
         while (this.stack.length) {
-            node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+            right = this.output.pop();
+            left = this.output.pop();
+            node = this.makeNode(this.stack.pop(), [].concat(left, right));
             this.output.push(node);
         }
 
         this.ast = this.output.pop();
+
+        return this.ast;
     },
 
     /**
@@ -155,7 +174,7 @@ Parser.prototype = {
      *  @param string token
      */
     processToken: function (token) {
-        var op1, op2, node;
+        var op1, op2, node, right, left;
 
         //token is a number or variable
         if (token.match(NUMVAR)) {
@@ -170,7 +189,9 @@ Parser.prototype = {
                     (op1.assoc === LEFT  && op1.weight <= op2.weight) || 
                     (op1.assoc === RIGHT && op1.weight <  op2.weight)
                 ) {
-                    node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+                    right = this.output.pop();
+                    left = this.output.pop();
+                    node = this.makeNode(this.stack.pop(), [].concat(left, right));
                     this.output.push(node);
                 } else {
                     break;
@@ -184,7 +205,9 @@ Parser.prototype = {
 
         } else if (token === RPAREN) {
             while (this.stack.length && this.stack.top() !== LPAREN) {
-                node = this.makeNode(this.stack.pop(), this.output.pop(), this.output.pop());
+                right = this.output.pop();
+                left = this.output.pop();
+                node = this.makeNode(this.stack.pop(), [].concat(left, right));
                 this.output.push(node);
             }
 
@@ -202,16 +225,115 @@ Parser.prototype = {
      * Makes a node for structuring the Abstract Syntax Tree
      *
      * @param string The operator in the node
-     * @param string The left protion of the branch
-     * @param string The right portion of the branch
+     * @param array leaves the leaf nodes of this node
      * @return The node object
      */
-    makeNode: function (op, right, left) {
-        return {
-            operator: op,
-            left:     left,
-            right:    right
-        };
+    makeNode: function (op, leaves) {
+        var node = {
+                operator: op,
+                //left: left,
+                //right: right,
+                leaves: leaves
+            },
+            tmpNode = {};
+
+        if (this.reduce) {
+            switch (node.operator) {
+                case '-':
+                    node.operator = '+';
+                    node.leaves[1] = this.makeNode('*', [].concat('-1', leaves[1]));
+                    break;
+                case '+':
+                    node.leaves = this.levelNode(node);
+                    break;
+                case '*':
+                    
+                        tmpNode = this.simplifyMultiplication(node);
+                    node = tmpNode;
+                    node.leaves = this.levelNode(node);
+                    break;
+                case '/':
+                        tmpNode = this.simplifyDivision(node);
+                    node = tmpNode;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return node;
+    },
+
+    levelNode: function (node) {
+        var leaves = [],
+            leafNode,
+            i;
+
+        for (i = 0; i < node.leaves.length; i++) {
+            leafNode = node.leaves[i];
+
+            if (
+                leafNode.hasOwnProperty('operator') && 
+                node.operator === leafNode.operator
+            ) {
+                leaves = leaves.concat(this.levelNode(leafNode));
+            } else {
+                leaves.push(leafNode);
+            }
+        }
+
+        return leaves;
+    },
+
+    simplifyDivision: function (node) {
+        var left = node.leaves[0] || {},
+            right = node.leaves[1] || {},
+            tmpNode;
+
+        if (
+            this.nodeHasOperator(node, '/') &&
+            this.nodeHasOperator(left, '/') &&
+            !this.nodeHasOperator(right, '/')
+        )  {
+            node.leaves[0] = left.leaves[0];
+            node.leaves[1] = this.makeNode('*', [].concat(left.leaves[1], right));
+        }
+        if (
+            this.nodeHasOperator(node, '/') &&
+            this.nodeHasOperator(right, '/') &&
+            !this.nodeHasOperator(left, '/')
+        ) {
+            node.leaves[0] = this.makeNode('*', [].concat(left, right.leaves[0]));
+            node.leaves[1] = right.leaves[1];
+        }
+        return node;
+    },
+
+    nodeHasOperator: function (node, operator) {
+        return (node && node.hasOwnProperty('operator') && node.operator === operator);
+    },
+
+    //@TODO fix this future jared
+    simplifyMultiplication: function (node) {
+        var i = 0,
+            leafNode;
+
+        for (i = 0; i < node.leaves.length; i++) {
+            leafNode = node.leaves[i];
+
+            if (this.nodeHasOperator(leafNode, '/')) {
+                node = this.makeNode('/', [].concat(
+                            this.makeNode('*', [].concat(
+                                node.leaves.slice(0,i),
+                                node.leaves.slice(i+1),
+                                leafNode.leaves[0]
+                            )),
+                            leafNode.leaves[1]
+                       ));
+            }
+        }
+
+        return node;
     },
 
     /**
@@ -223,60 +345,25 @@ Parser.prototype = {
      * format.
      *
      * @param mixed node The node to stringify
-     * @param boolean reduce Optional. If true the expression will attempt reduction 
      * @return string the formatted string
      */
-    print: function (node, reduce) {
+    print: function (node) {
         var str,
             left,
-            right;
-
-        if (reduce && typeof node !== 'string') {
-            left  = this.print(node.left, reduce);
-            right = this.print(node.right, reduce);
-
-            node.left  = left;
-            node.right = right;
-            node = this.reduce(node);
-        }
+            right,
+            i;
 
         if (typeof node === 'string') {
             str = node;
         } else {
-            str = '(' + node.operator + ' ' + this.print(node.left) + ' ' + this.print(node.right) + ')'; 
+            str = '(' + node.operator;
+            for (i = 0; i < node.leaves.length; i++) {
+                str += ' ' + this.print(node.leaves[i]);
+            }
+            str += ')';
         }
 
         return str;
-    },
-
-    /**
-     * Extremely simple reduce
-     *
-     * This function will try an perform operation on values. If it end result is an integer
-     * then it will return the value otherwise the entire node will be returned.
-     *
-     * @param object node the node in the ast to attempt reduction on
-     * @return string|object
-     */
-    reduce: function (node) {
-        if (!node.hasOwnProperty('operator')) { return node; }
-
-        var left  = parseInt(node.left, 10),
-            right = parseInt(node.right, 10),
-            opMethod = this.operators[node.operator].method,
-            tmp,
-            retVal = node;
-
-        if (!isNaN(left) && !isNaN(right)) {
-            tmp = opMethod(left, right);
-
-            // Only return if evaluated return is an integer
-            if (tmp % 1 === 0) {
-                retVal = tmp.toString();
-            }
-        }
-
-        return retVal;
     }
 };
 
