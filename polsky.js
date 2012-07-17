@@ -231,45 +231,60 @@ Parser.prototype = {
     makeNode: function (op, leaves) {
         var node = {
                 operator: op,
-                //left: left,
-                //right: right,
                 leaves: leaves
-            },
-            tmpNode = {};
+            };
 
         if (this.reduce) {
-            switch (node.operator) {
-                case '-':
-                    node.operator = '+';
-                    node.leaves[1] = this.makeNode('*', [].concat('-1', leaves[1]));
-                    break;
-                case '+':
-                    node.leaves = this.levelNode(node);
-                    break;
-                case '*':
-                    
-                        tmpNode = this.simplifyMultiplication(node);
-                    node = tmpNode;
-                    node.leaves = this.levelNode(node);
-                    break;
-                case '/':
-                        tmpNode = this.simplifyDivision(node);
-                    node = tmpNode;
-                    break;
-                default:
-                    break;
-            }
+            node = this.reducer(node);
         }
 
         return node;
     },
 
+    /**
+     * Attempts to simplify the Abstract Syntax Tree as much as possible
+     *
+     * @param object node the node to be reduced
+     * @return object the reduced node.
+     */
+    reducer: function (node) {
+        var leaves = node.leaves;
+
+        switch (node.operator) {
+            case '-':
+                node.operator = '+';
+                node.leaves[1] = this.makeNode('*', [].concat('-1', leaves[1]));
+                break;
+            case '+':
+                node = this.levelNode(node);
+                break;
+            case '*':
+                node = this.simplifyMultiplication(node);
+                node = this.levelNode(node);
+                break;
+            case '/':
+                node = this.simplifyDivision(node);
+                break;
+            default:
+                break;
+        }
+
+        return node;
+    },
+
+    /**
+     * Levels a node if the the sub-nodes contain similar operations that
+     * are left/right agnostic.
+     *
+     * @param object node the node to level out
+     * @return object the node with leveled out leaves
+     */
     levelNode: function (node) {
         var leaves = [],
             leafNode,
             i;
 
-        for (i = 0; i < node.leaves.length; i++) {
+        for (i = 0; i < node.leaves.length; i += 1) {
             leafNode = node.leaves[i];
 
             if (
@@ -282,9 +297,18 @@ Parser.prototype = {
             }
         }
 
-        return leaves;
+        node.leaves = leaves;
+
+        return node;
     },
 
+    /**
+     * Attempts to simplify division by removing any nested division nodes and 
+     * converts the sub-expression to use multiplication
+     *
+     * @param object node The node to simplified
+     * @return object node The simplified node
+     */
     simplifyDivision: function (node) {
         var left = node.leaves[0] || {},
             right = node.leaves[1] || {},
@@ -309,16 +333,17 @@ Parser.prototype = {
         return node;
     },
 
-    nodeHasOperator: function (node, operator) {
-        return (node && node.hasOwnProperty('operator') && node.operator === operator);
-    },
-
-    //@TODO fix this future jared
+    /**
+     * Attempts to simplify any multiplication with disivision sub-nodes
+     *
+     * @param object node the node to simplify
+     * @return object node the simplified node
+     */
     simplifyMultiplication: function (node) {
         var i = 0,
             leafNode;
 
-        for (i = 0; i < node.leaves.length; i++) {
+        for (i = 0; i < node.leaves.length; i += 1) {
             leafNode = node.leaves[i];
 
             if (this.nodeHasOperator(leafNode, '/')) {
@@ -330,10 +355,24 @@ Parser.prototype = {
                             )),
                             leafNode.leaves[1]
                        ));
+
+                // We only care about the first occurance of a division node
+                break;
             }
         }
 
         return node;
+    },
+
+    /**
+     * Checkes if the node has an operator property equal to the second parameter
+     *
+     * @param mixed The node to check
+     * @param string the operator to check on the node
+     * @return boolean
+     */
+    nodeHasOperator: function (node, operator) {
+        return (node && node.hasOwnProperty('operator') && node.operator === operator);
     },
 
     /**
@@ -357,7 +396,7 @@ Parser.prototype = {
             str = node;
         } else {
             str = '(' + node.operator;
-            for (i = 0; i < node.leaves.length; i++) {
+            for (i = 0; i < node.leaves.length; i += 1) {
                 str += ' ' + this.print(node.leaves[i]);
             }
             str += ')';
