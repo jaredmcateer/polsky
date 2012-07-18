@@ -67,6 +67,7 @@ Parser = function (expr) {
         /**
          * #parse() - Parses the expression into an abstract syntax tree
          *
+         * @param boolean reduce Optional. If true the equation will attempt simple reduction
          * @return The Abstract Syntax Tree
          */
         parse: function (reduce) {
@@ -148,10 +149,11 @@ Parser.prototype = {
 
                     retVal = [a / b];
 
+                    // get greated commmon denominator
                     if (retVal[0] % 1 !== 0) {
                         gcd = gcd(a, b);
-                        a = (a/gcd).toString();
-                        b = (b/gcd).toString();
+                        a = (a / gcd).toString();
+                        b = (b / gcd).toString();
                         retVal = [a, b];
                     }
                 }
@@ -190,6 +192,8 @@ Parser.prototype = {
             this.createNodeFromStack();
         }
 
+        // at this point our output array is like an egg with a delicious
+        // Abstract Syntax Tree yoke, let's remove the shell.
         this.ast = this.output.pop();
         
         if (this.reduce) {
@@ -476,6 +480,8 @@ Parser.prototype = {
      *              *   d
      *             / \
      *            b   c
+     *
+     * The same works for addition operations
      *
      * @param object node the node to level out
      * @return object the leveled out leaves of the node
