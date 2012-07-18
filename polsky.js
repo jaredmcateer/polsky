@@ -84,12 +84,7 @@ Parser = function (expr) {
             that.reduce = reduce;
 
             return that.print(that.parse(tokens));
-        },
-        
-        levelNode: function(node) {
-            return that.levelNode(node);
-
-        } 
+        }
     };
 };
 
@@ -103,7 +98,7 @@ Parser.prototype = {
                 var retVal = [a, b];
 
                 if (!isNaN(a) && !isNaN(b)) {
-                    retVal = parseInt(a, 10) + parseInt(b);
+                    retVal = parseInt(a, 10) + parseInt(b, 10);
                     retVal = [retVal.toString()];
                 }
 
@@ -117,7 +112,7 @@ Parser.prototype = {
                 var retVal = [a, b];
 
                 if (!isNaN(a) && !isNaN(b)) {
-                    retVal = parseInt(a, 10) - parseInt(b);
+                    retVal = parseInt(a, 10) - parseInt(b, 10);
                     retVal = [retVal.toString()];
                 }
 
@@ -355,30 +350,26 @@ Parser.prototype = {
      */
     combineLikeTerms: function (node) {
         var i,
-            key,
             leafNode,
             numberTotal = null,
             subExprs = [],
             tmpLeaves = [],
             subLeaves = [],
-            vars = {},
-            tmpOp = '^';
+            vars = {};
 
         if (this.nodeHasOperator(node, '+') || this.nodeHasOperator(node, '*')) {
             for (i = 0; i < node.leaves.length; i += 1) {
                 leafNode = node.leaves[i];
-                if (!isNaN(leafNode)) {
-                    if (numberTotal === null) {
-                        numberTotal = parseInt(leafNode, 10);
-                    } else {
-                        numberTotal = this.operators[node.operator].method(numberTotal, parseInt(leafNode, 10));
-                    }
-                } else if (!leafNode.hasOwnProperty('operator')) {
-                    if (!vars.hasOwnProperty(leafNode)) {
-                        vars[leafNode] = 0;
-                    }
 
-                    vars[leafNode] += 1;
+                // Leaf node is a number
+                if (!isNaN(leafNode)) {
+                    numberTotal = this.combineLikeNumbers(numberTotal, leafNode, node.operator);
+
+                // Leaf node is a variable
+                } else if (!leafNode.hasOwnProperty('operator')) {
+                    vars = this.combineLikeVariables(vars, leafNode);
+
+                // Leaf node is a sub-expression attempt to combine its terms
                 } else {
                     subLeaves = this.combineLikeTerms(leafNode);
                     if (subLeaves.length === 1) {
@@ -392,19 +383,8 @@ Parser.prototype = {
             if (numberTotal !== null) {
                 tmpLeaves.push(numberTotal.toString());
             }
-
-            for (key in vars) {
-                if (vars.hasOwnProperty(key)) {
-                    if (vars[key] > 1) {
-                        if (this.nodeHasOperator(node, '+')) {
-                            tmpOp = '*';
-                        }
-                        subExprs.push(this.makeNode(tmpOp, [key, vars[key].toString()]));
-                    } else {
-                        tmpLeaves.push(key);
-                    }
-                }
-            }
+            
+            tmpLeaves = tmpLeaves.concat(this.mergeVariables(vars, node.operator));
 
             if (subExprs.length > 0) {
                 tmpLeaves = tmpLeaves.concat(subExprs);
@@ -419,11 +399,86 @@ Parser.prototype = {
     },
 
     /**
+     * Helper function to combine like numbers
+     *
+     * @param Number a the running total to apply the new number to
+     * @param Number b the new number to apply to the running total
+     * @param String operator the method of applying b to a
+     * @return Number returns the result of the operation
+     */
+    combineLikeNumbers: function (a, b, operator) {
+        a = parseInt(a, 10);
+        b = parseInt(b, 10);
+
+        if (isNaN(a)) {
+            a = b;
+        } else {
+            a = this.operators[operator].method(a, b);
+        }
+
+        return a;
+    },
+
+    /**
+     * Keeps a running total of like variables found in an equation
+     *
+     * @param object vars A keyed objects containing variables and their count
+     * @param string variable the variable to add to the vars object
+     * @return object returns the updated vars object
+     */
+    combineLikeVariables: function(vars, variable) {
+        if (!vars.hasOwnProperty(variable)) {
+            vars[variable] = 0;
+        }
+
+        vars[variable] += 1;
+
+        return vars;
+    },
+
+    /**
+     * Helper function to combine like variables
+     *
+     * @param obj vars A keyed object of variables and the instances they were found in the parent node
+     * @param string currOp the current operator of the parent node, used to determine how to combine vars
+     * @return array Returns an array of variables that have been combine if multiple instances were found
+     */
+     mergeVariables: function (vars, currOp) {
+        var retVal = [],
+            newOp = '^',
+            key;
+
+            for (key in vars) { if (vars.hasOwnProperty(key)) {
+                if (vars[key] > 1) {
+                    // Combine variable terms
+                    if (currOp === '+') {
+                        newOp = '*';
+                    }
+
+                    retVal.push(this.makeNode(newOp, [key, vars[key].toString()]));
+
+                } else {
+                    retVal.push(key);
+                }
+            }}
+
+        return retVal;
+    },
+
+    /**
      * Levels a node if the the sub-nodes contain similar operations that
      * are left/right agnostic.
      *
+     *              *                      *
+     *             / \                  ┌─┬┴┬─┐
+     *            a   *     -->         a b c d
+     *               / \
+     *              *   d
+     *             / \
+     *            b   c
+     *
      * @param object node the node to level out
-     * @return object the node with leveled out leaves
+     * @return object the leveled out leaves of the node
      */
     levelNode: function (node) {
         var leaves = [],
@@ -448,7 +503,26 @@ Parser.prototype = {
 
     /**
      * Attempts to simplify division by removing any nested division nodes and 
-     * converts the sub-expression to use multiplication
+     * converts the sub-expression to use multiplication, if the two nodes are
+     * numbers it will attempt to evaluate the expression, if a remander is detected
+     * it will then attempt to simplify using the greatest common denominator
+     *
+     * Node has division sub-node on left side:
+     *
+     *             %               %
+     *            / \             / \
+     *           %   c    --->   a   *
+     *          / \                 / \
+     *         a   b               b   c
+     *
+     * Node has division sub-node on right side:
+     *
+     *             %               %
+     *            / \             / \
+     *           a   %    --->   *   c
+     *              / \         / \    
+     *             b   c       a   b    
+     *
      *
      * @param object node The node to simplified
      * @return object node The simplified node
@@ -477,6 +551,18 @@ Parser.prototype = {
 
     /**
      * Attempts to simplify any multiplication with disivision sub-nodes
+     * by move the division node above the multiplication node. No matter
+     * how many nodes the multiplication node has it will only move the 
+     * first division node.
+     *
+     * 
+     *          *                %
+     *         /|\              / \
+     *        a d %    --->    *   c
+     *           / \          /|\
+     *          b   c        a d b
+     *
+     *
      *
      * @param object node the node to simplify
      * @return object node the simplified node
