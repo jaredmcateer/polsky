@@ -100,36 +100,65 @@ Parser.prototype = {
             weight: 2, 
             assoc: LEFT,
             method: function (a, b) {
-                return a + b; 
+                var retVal = [a, b];
+
+                if (!isNaN(a) && !isNaN(b)) {
+                    retVal = parseInt(a, 10) + parseInt(b);
+                    retVal = [retVal.toString()];
+                }
+
+                return retVal; 
             } 
         },
         '-': { 
             weight: 2, 
             assoc: LEFT,
             method: function (a, b) {
-                return a - b;
+                var retVal = [a, b];
+
+                if (!isNaN(a) && !isNaN(b)) {
+                    retVal = parseInt(a, 10) - parseInt(b);
+                    retVal = [retVal.toString()];
+                }
+
+                return retVal; 
             }
         },
         '*': { 
             weight: 3, 
             assoc: LEFT,
             method: function (a, b) {
-                return a * b;
+                var retVal = [a, b];
+
+                if (!isNaN(a) && !isNaN(b)) {
+                    retVal = parseInt(a, 10) * parseInt(b, 10);
+                    retVal = [retVal.toString()];
+                }
+
+                return retVal; 
             }
         },
         '/': { 
             weight: 3, 
             assoc: LEFT,
             method: function (a, b) {
-                var gcd = (function getGcd(num, dem) {
+                var gcd = function getGcd(num, dem) {
                         return dem ? getGcd(dem, num % dem) : num;
-                    }(a, b)),
-                    retVal;
+                    },
+                    retVal = [a, b];
+                
+                if (!isNaN(a) && !isNaN(b)) {
+                    a = parseInt(a, 10);
+                    b = parseInt(b, 10);
 
-                retVal = a / b;
+                    retVal = [a / b];
 
-                if (retVal % 1 !== 0) {
-                    retVal = [a/gcd, b/gcd];
+                    if (retVal[0] % 1 !== 0) {
+                        gcd = gcd(a, b);
+                        a = (a/gcd).toString();
+                        b = (b/gcd).toString();
+                        retVal = [a, b];
+                    }
                 }
 
                 return retVal;
@@ -139,7 +168,13 @@ Parser.prototype = {
             weight: 4, 
             assoc: RIGHT,
             method: function (a, b) {
-                return Math.pow(a, b);
+                var retVal = [a, b];
+
+                if (!isNaN(a) && !isNaN(b)) {
+                    retVal = [Math.pow(parseInt(a, 10), parseInt(b, 10)).toString()];
+                }
+
+                return retVal;
             }
         }
     } ,
@@ -150,20 +185,25 @@ Parser.prototype = {
      * @param array tokens the tokens to be parsed in infix notation order
      */
     parse: function (tokens) {
-        var node, left, right;
+        var node, tmpAst;
         while (tokens.length) {
             this.processToken(tokens.shift());
         }
 
         // If there is anything left on the stack pop them into the output.
         while (this.stack.length) {
-            right = this.output.pop();
-            left = this.output.pop();
-            node = this.makeNode(this.stack.pop(), [].concat(left, right));
-            this.output.push(node);
+            this.createNodeFromStack();
         }
 
         this.ast = this.output.pop();
+        
+        if (this.reduce) {
+            // Keep iterating until the tree doesn't change
+            do {
+                tmpAst = JSON.stringify(this.ast);
+                this.ast = this.reducer(this.ast);
+            } while (tmpAst !== JSON.stringify(this.ast));
+        }
 
         return this.ast;
     },
@@ -171,10 +211,13 @@ Parser.prototype = {
     /**
      *  Processes an indvidual token
      *
+     *  This is where the meat of the Shunting Yard Algorithm takes place
+     *  See top of file for more detailed explanation of the algorithm
+     *
      *  @param string token
      */
     processToken: function (token) {
-        var op1, op2, node, right, left;
+        var op1, op2, node;
 
         //token is a number or variable
         if (token.match(NUMVAR)) {
@@ -189,10 +232,7 @@ Parser.prototype = {
                     (op1.assoc === LEFT  && op1.weight <= op2.weight) || 
                     (op1.assoc === RIGHT && op1.weight <  op2.weight)
                 ) {
-                    right = this.output.pop();
-                    left = this.output.pop();
-                    node = this.makeNode(this.stack.pop(), [].concat(left, right));
-                    this.output.push(node);
+                    this.createNodeFromStack();
                 } else {
                     break;
                 }
@@ -205,10 +245,7 @@ Parser.prototype = {
 
         } else if (token === RPAREN) {
             while (this.stack.length && this.stack.top() !== LPAREN) {
-                right = this.output.pop();
-                left = this.output.pop();
-                node = this.makeNode(this.stack.pop(), [].concat(left, right));
-                this.output.push(node);
+                this.createNodeFromStack();
             }
 
             if (this.stack.top() === LPAREN) {
@@ -219,6 +256,22 @@ Parser.prototype = {
         } else {
             throw new Error('Invalid token');
         }
+    },
+
+    /**
+     * Helper function for the SYA.
+     *
+     * Pops the right and left nodes of an expression off the output array
+     * as well as the top operator of the operator stack and creates a new
+     * node which is then pushed back onto the output array.
+     *
+     */
+    createNodeFromStack: function () {
+        var right = this.output.pop(),
+            left = this.output.pop(),
+            node = this.makeNode(this.stack.pop(), [].concat(left, right));
+
+        this.output.push(node);
     },
 
     /**
@@ -234,21 +287,25 @@ Parser.prototype = {
                 leaves: leaves
             };
 
-        if (this.reduce) {
-            node = this.reducer(node);
-        }
-
         return node;
     },
 
     /**
      * Attempts to simplify the Abstract Syntax Tree as much as possible
      *
+     * Sometimes these simplifications appear more complex largely due to
+     * the algorithm attempting to remove as much subtraction and division
+     * where possible. Multiplication and addition are preferred because 
+     * they are agnostic to what is to the left and right of the operator
+     * as well as having the potential to be flattened to make the tree a
+     * little bit more compact.
+     *
      * @param object node the node to be reduced
      * @return object the reduced node.
      */
     reducer: function (node) {
-        var leaves = node.leaves;
+        var leaves = node.leaves,
+            i;
 
         switch (node.operator) {
             case '-':
@@ -256,11 +313,16 @@ Parser.prototype = {
                 node.leaves[1] = this.makeNode('*', [].concat('-1', leaves[1]));
                 break;
             case '+':
-                node = this.levelNode(node);
+                node.leaves = this.levelNode(node);
+                node.leaves = this.combineLikeTerms(node);
                 break;
             case '*':
                 node = this.simplifyMultiplication(node);
-                node = this.levelNode(node);
+                node.leaves = this.levelNode(node);
+                node.leaves = this.combineLikeTerms(node);
+                break;
+            case '^':
+                node.leaves = this.operators[node.operator].method(node.leaves[0], node.leaves[1]);
                 break;
             case '/':
                 node = this.simplifyDivision(node);
@@ -269,7 +331,91 @@ Parser.prototype = {
                 break;
         }
 
+        if (node.hasOwnProperty('leaves')) {
+            if (node.leaves.length === 1) {
+                node = node.leaves[0];
+            } else {
+                for (i = 0; i < node.leaves.length; i += 1) {
+                    if (node.leaves[i].hasOwnProperty('operator')) {
+                        node.leaves[i] = this.reducer(node.leaves[i]);
+                    }
+                }
+            }
+        }
         return node;
+    },
+
+    /**
+     * Will attempt to combine like terms to reduce the occurances of 
+     * parameters and numbers.
+     *
+     * @param object node The node to combine terms from
+     * @return mixed returns the leaves of the node passed in or if possible the
+     *               single integer that resulted in the combination of terms.
+     */
+    combineLikeTerms: function (node) {
+        var i,
+            key,
+            leafNode,
+            numberTotal = null,
+            subExprs = [],
+            tmpLeaves = [],
+            subLeaves = [],
+            vars = {},
+            tmpOp = '^';
+
+        if (this.nodeHasOperator(node, '+') || this.nodeHasOperator(node, '*')) {
+            for (i = 0; i < node.leaves.length; i += 1) {
+                leafNode = node.leaves[i];
+                if (!isNaN(leafNode)) {
+                    if (numberTotal === null) {
+                        numberTotal = parseInt(leafNode, 10);
+                    } else {
+                        numberTotal = this.operators[node.operator].method(numberTotal, parseInt(leafNode, 10));
+                    }
+                } else if (!leafNode.hasOwnProperty('operator')) {
+                    if (!vars.hasOwnProperty(leafNode)) {
+                        vars[leafNode] = 0;
+                    }
+
+                    vars[leafNode] += 1;
+                } else {
+                    subLeaves = this.combineLikeTerms(leafNode);
+                    if (subLeaves.length === 1) {
+                        tmpLeaves.push(subLeaves[0]);
+                    } else {
+                        subExprs.push(leafNode);
+                    }
+                }
+            }
+
+            if (numberTotal !== null) {
+                tmpLeaves.push(numberTotal.toString());
+            }
+
+            for (key in vars) {
+                if (vars.hasOwnProperty(key)) {
+                    if (vars[key] > 1) {
+                        if (this.nodeHasOperator(node, '+')) {
+                            tmpOp = '*';
+                        }
+                        subExprs.push(this.makeNode(tmpOp, [key, vars[key].toString()]));
+                    } else {
+                        tmpLeaves.push(key);
+                    }
+                }
+            }
+
+            if (subExprs.length > 0) {
+                tmpLeaves = tmpLeaves.concat(subExprs);
+            }
+        }
+
+        if (tmpLeaves.length > 0) {
+            return tmpLeaves;
+        }
+
+        return node.leaves;
     },
 
     /**
@@ -297,9 +443,7 @@ Parser.prototype = {
             }
         }
 
-        node.leaves = leaves;
-
-        return node;
+        return leaves;
     },
 
     /**
@@ -314,22 +458,20 @@ Parser.prototype = {
             right = node.leaves[1] || {},
             tmpNode;
 
-        if (
-            this.nodeHasOperator(node, '/') &&
-            this.nodeHasOperator(left, '/') &&
-            !this.nodeHasOperator(right, '/')
-        )  {
-            node.leaves[0] = left.leaves[0];
-            node.leaves[1] = this.makeNode('*', [].concat(left.leaves[1], right));
+        if (this.nodeHasOperator(node, '/')) {
+            if ( this.nodeHasOperator(left, '/') && !this.nodeHasOperator(right, '/'))  {
+                node.leaves[0] = left.leaves[0];
+                node.leaves[1] = this.makeNode('*', [].concat(left.leaves[1], right));
+
+            } else if (this.nodeHasOperator(right, '/') && !this.nodeHasOperator(left, '/')) {
+                node.leaves[0] = this.makeNode('*', [].concat(left, right.leaves[0]));
+                node.leaves[1] = right.leaves[1];
+
+            } else if ( !isNaN(left) && !isNaN(right)) {
+                node.leaves = this.operators[node.operator].method(left, right);
+            }
         }
-        if (
-            this.nodeHasOperator(node, '/') &&
-            this.nodeHasOperator(right, '/') &&
-            !this.nodeHasOperator(left, '/')
-        ) {
-            node.leaves[0] = this.makeNode('*', [].concat(left, right.leaves[0]));
-            node.leaves[1] = right.leaves[1];
-        }
+
         return node;
     },
 

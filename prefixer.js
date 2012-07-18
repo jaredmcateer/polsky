@@ -6,7 +6,10 @@ var cmdopt = require('cmdopt'),
     polsky = require('./polsky'),
     fs = require('fs'),
     fileName,
-    reduce = false;
+    reduce = false,
+    purple = '\u001b[1;35m',
+    yellow = '\u001b[1;33m',
+    reset = '\u001b[0m';
 
 getOpts.option('-h, --help', 'Show this.');
 getOpts.option('-r, --reduce', 'Will attempt to reduce the equation when integer math is possible.');
@@ -55,7 +58,7 @@ fs.exists(fileName, function (exists){
 
                 try {
                     parser = new polsky.Parser(expr);
-                    output = expr + ' -> ' + parser.print(reduce);
+                    output = purple + expr + reset + ' -> ' + yellow + parser.print(reduce) + reset;
                 } catch (e) {
                     process.stdout.write('Error encountered: ' + e.message + EOL);
                 }
