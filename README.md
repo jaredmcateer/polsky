@@ -1,4 +1,4 @@
-# Polsky - Converts infix expressions to pre/postfix
+# Polsky - Converts infix expressions to prefix
 
 Polsky is a tool for converting mathematical infix expressions into prefix notation (polish notation).
 
