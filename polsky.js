@@ -147,7 +147,7 @@ Parser.prototype = {
                     a = parseInt(a, 10);
                     b = parseInt(b, 10);
 
-                    retVal = [a / b];
+                    retVal = [(a / b).toString()];
 
                     // get greated commmon denominator
                     if (retVal[0] % 1 !== 0) {
