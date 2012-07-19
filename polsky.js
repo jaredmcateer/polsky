@@ -183,25 +183,30 @@ Parser.prototype = {
      */
     parse: function (tokens) {
         var node, tmpAst;
-        while (tokens.length) {
-            this.processToken(tokens.shift());
-        }
 
-        // If there is anything left on the stack pop them into the output.
-        while (this.stack.length) {
-            this.createNodeFromStack();
-        }
+        if (tokens.length === 1) {
+            this.ast = tokens[0];
+        } else {
+            while (tokens.length) {
+                this.processToken(tokens.shift());
+            }
 
-        // at this point our output array is like an egg with a delicious
-        // Abstract Syntax Tree yoke, let's remove the shell.
-        this.ast = this.output.pop();
-        
-        if (this.reduce) {
-            // Keep iterating until the tree doesn't change
-            do {
-                tmpAst = JSON.stringify(this.ast);
-                this.ast = this.reducer(this.ast);
-            } while (tmpAst !== JSON.stringify(this.ast));
+            // If there is anything left on the stack pop them into the output.
+            while (this.stack.length) {
+                this.createNodeFromStack();
+            }
+
+            // at this point our output array is like an egg with a delicious
+            // Abstract Syntax Tree yoke, let's remove the shell.
+            this.ast = this.output.pop();
+
+            if (this.reduce) {
+                // Keep iterating until the tree doesn't change
+                do {
+                    tmpAst = JSON.stringify(this.ast);
+                    this.ast = this.reducer(this.ast);
+                } while (tmpAst !== JSON.stringify(this.ast));
+            }
         }
 
         return this.ast;
@@ -356,7 +361,6 @@ Parser.prototype = {
         var i,
             leafNode,
             numberTotal = null,
-            subExprs = [],
             tmpLeaves = [],
             subLeaves = [],
             vars = {};
@@ -379,7 +383,7 @@ Parser.prototype = {
                     if (subLeaves.length === 1) {
                         tmpLeaves.push(subLeaves[0]);
                     } else {
-                        subExprs.push(leafNode);
+                        tmpLeaves.push(leafNode);
                     }
                 }
             }
@@ -388,15 +392,7 @@ Parser.prototype = {
                 tmpLeaves.push(numberTotal.toString());
             }
             
-            tmpLeaves = tmpLeaves.concat(this.mergeVariables(vars, node.operator));
-
-            if (subExprs.length > 0) {
-                tmpLeaves = tmpLeaves.concat(subExprs);
-            }
-        }
-
-        if (tmpLeaves.length > 0) {
-            return tmpLeaves;
+            return tmpLeaves.concat(this.mergeVariables(vars, node.operator));
         }
 
         return node.leaves;
@@ -539,7 +535,7 @@ Parser.prototype = {
             tmpNode;
 
         if (this.nodeHasOperator(node, '/')) {
-            if ( this.nodeHasOperator(left, '/') && !this.nodeHasOperator(right, '/'))  {
+            if (this.nodeHasOperator(left, '/') && !this.nodeHasOperator(right, '/'))  {
                 node.leaves[0] = left.leaves[0];
                 node.leaves[1] = this.makeNode('*', [].concat(left.leaves[1], right));
 
@@ -547,7 +543,7 @@ Parser.prototype = {
                 node.leaves[0] = this.makeNode('*', [].concat(left, right.leaves[0]));
                 node.leaves[1] = right.leaves[1];
 
-            } else if ( !isNaN(left) && !isNaN(right)) {
+            } else if (!isNaN(left) && !isNaN(right)) {
                 node.leaves = this.operators[node.operator].method(left, right);
             }
         }
