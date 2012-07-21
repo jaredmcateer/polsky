@@ -17,7 +17,7 @@ The exposed api will provides the following methods:
 
 # Installation
 
-`git clone git@bitbucket.org:jaredmcateer/polsky.git`
+Clone the repo and enter the directory
 
 `npm install` - necessary for the command line script which relies on one external dependency.
 
